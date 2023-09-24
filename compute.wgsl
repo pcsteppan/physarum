@@ -1,5 +1,6 @@
 const PI = 3.1415926538;
 const att_deposit = 5;
+const kernel_size = 1.;
 
 // Pixels
 @group(0) @binding(0)  
@@ -117,25 +118,27 @@ fn render(@builtin(global_invocation_id) id : vec3u)
   attGrid[id.x] *= .91;
 }
 
+// does a mean diffuse on the attraction grid
 @compute @workgroup_size(16, 16)
 fn diffuse(@builtin(global_invocation_id) id : vec3u) 
 {
   var p = vec2(f32(id.x), f32(id.y));
-  var sum = 0.0;
   
-  var kernelSize = 1.;
-
-  for(var x = -kernelSize; x <= kernelSize; x += 1.0) 
+  var sum = 0.;
+  for(var x = -kernel_size; x <= kernel_size; x += 1.0) 
   {
-    for(var y = -kernelSize; y <= kernelSize; y += 1.0) 
+    for(var y = -kernel_size; y <= kernel_size; y += 1.0) 
     {
       sum += attGrid[index(p + vec2(x, y))];
     }
   }
 
+  var newAtt = sum / pow(kernel_size * 2 + 1, 2);
+
   var norm_p = p / rez;
-  var close_to_edgeness_x = -pow((norm_p.x - .5) * 2, 4) + 1;
-  var close_to_edgeness_y = -pow((norm_p.y - .5) * 2, 4) + 1;
+  var close_to_edgeness_x = -pow((norm_p.x - .5) * 2, 6) + 1;
+  var close_to_edgeness_y = -pow((norm_p.y - .5) * 2, 6) + 1;
+
   attGrid[index(p)] *= min(close_to_edgeness_x, close_to_edgeness_y);
 }
 

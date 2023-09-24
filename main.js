@@ -15,7 +15,7 @@ const uniform = (value, size) => { return { value, size } }
 const uniforms = {
 	rez: uniform(2048, sizes.f32),
 	time: uniform(0, sizes.f32),
-	count: uniform(2000000, sizes.u32),
+	count: uniform(8388608, sizes.u32),
 	sensor_angle: uniform(Math.PI / 6., sizes.f32),
 	sensor_distance: uniform(12, sizes.f32),
 	rotation_angle: uniform(Math.PI / 32., sizes.f32),
@@ -255,7 +255,7 @@ async function main() {
 	gui.add(uniforms.rotation_angle, 'value', 0.0, Math.PI / 2.)
 		.name('rotation_angle')
 		.listen();
-	gui.add(uniforms.count, 'value', 0, 3000000)
+	gui.add(uniforms.count, 'value', 0, 8388608)
 		.name('count')
 		.listen();
 	gui.add(uniforms.velocity, 'value', 0, 15)

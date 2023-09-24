@@ -69,11 +69,13 @@ const settings = {
 
 async function main() {
 	if (!navigator.gpu) {
+		alert("WebGPU not supported in browser. Try lastest version of Chrome on desktop!");
 		throw Error("WebGPU not supported.");
 	}
 
 	const adapter = await navigator.gpu.requestAdapter();
 	if (!adapter) {
+		alert("Couldn't request WebGPU adapter.")
 		throw Error("Couldn't request WebGPU adapter.");
 	}
 
@@ -249,7 +251,7 @@ async function main() {
 	gui.add(uniforms.sensor_angle, 'value', 0, Math.PI / 2.)
 		.name('sensor_angle')
 		.listen();
-	gui.add(uniforms.sensor_distance, 'value', 0, 1024)
+	gui.add(uniforms.sensor_distance, 'value', 0, 100)
 		.name('sensor_distance')
 		.listen();
 	gui.add(uniforms.rotation_angle, 'value', 0.0, Math.PI / 2.)
@@ -257,6 +259,7 @@ async function main() {
 		.listen();
 	gui.add(uniforms.count, 'value', 0, 8388608)
 		.name('count')
+		.step(1)
 		.listen();
 	gui.add(uniforms.velocity, 'value', 0, 15)
 		.name('velocity')

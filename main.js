@@ -30,10 +30,10 @@ const presets = {
 		velocity: uniforms.velocity.value,
 	},
 	MICRO: {
-		sensor_angle: .52,
-		sensor_distance: 10,
-		rotation_angle: .13,
-		velocity: 1.5,
+		sensor_angle: .5,
+		sensor_distance: 4,
+		rotation_angle: .115,
+		velocity: 0.75,
 	},
 	LACE: {
 		sensor_angle: .35,

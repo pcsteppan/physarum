@@ -221,7 +221,16 @@ async function main() {
 	};
 	reset();
 
+	let averageFrameTimeElapsed = 0;
+	let frameSampleCount = 0;
+
+	console.log('test');
+
+	let perfMark = performance.now();
+	let isCountAdjusted = false;
+
 	const draw = () => {
+
 		const encoder = gpu.createCommandEncoder();
 		const pass = encoder.beginComputePass();
 		pass.setBindGroup(0, pixelBufferBindGroup);
@@ -242,37 +251,57 @@ async function main() {
 		render(gpu, uniforms.rez.value, pixelBuffer, format, context, encoder);
 		gpu.queue.submit([encoder.finish()]);
 		gpu.queue.writeBuffer(uniformBuffers.time, 0, new Float32Array([uniforms.time.value++]));
+
+		const endDrawTime = performance.now();
+
+		// capture first 10 frames and adjust agent count if fps is too low 
+		const fps = 1 / (averageFrameTimeElapsed / frameSampleCount / 1000);
+		if (frameSampleCount < 10) {
+			averageFrameTimeElapsed += endDrawTime - perfMark;
+			frameSampleCount++;
+			perfMark = endDrawTime;
+
+		} else if (fps < 24 && !isCountAdjusted) {
+			console.debug('Performance was too low (< 30 fps), lowering simulation agent count.', fps.toFixed(1) + ' fps');
+
+			uniforms.count.value = 1000000;
+			writeUniforms();
+
+			isCountAdjusted = true;
+		}
+
 		requestAnimationFrame(draw);
-		// setTimeout(() => draw(), 10);
+		// setTimeout(() => draw(), 1000);
 	};
 	draw();
 
 	let gui = new lil.GUI();
 	gui.add(uniforms.sensor_angle, 'value', 0, Math.PI / 2.)
-		.name('sensor_angle')
+		.name('sensor angle')
 		.listen();
 	gui.add(uniforms.sensor_distance, 'value', 0, 100)
-		.name('sensor_distance')
+		.name('sensor distance')
 		.listen();
 	gui.add(uniforms.rotation_angle, 'value', 0.0, Math.PI / 2.)
-		.name('rotation_angle')
+		.name('rotation angle')
 		.listen();
 	gui.add(uniforms.count, 'value', 0, 8388608)
-		.name('count')
+		.name('agent count')
 		.step(1)
 		.listen();
 	gui.add(uniforms.velocity, 'value', 0, 15)
 		.name('velocity')
 		.listen();
-	gui.add(selectedPreset, 'current', Object.keys(presets)).onChange(preset => {
-		selectedPreset.current = preset;
-		const newSelectedPreset = presets[preset];
-		for (let k in newSelectedPreset) {
-			uniforms[k].value = newSelectedPreset[k];
-		}
-		writeUniforms();
-	});
+	gui.add(selectedPreset, 'current', Object.keys(presets))
+		.name('preset')
+		.onChange(preset => {
+			selectedPreset.current = preset;
+			const newSelectedPreset = presets[preset];
+			for (let k in newSelectedPreset) {
+				uniforms[k].value = newSelectedPreset[k];
+			}
+			writeUniforms();
+		});
 	gui.onChange(writeUniforms);
 }
 main();
-

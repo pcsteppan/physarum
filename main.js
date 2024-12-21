@@ -19,7 +19,8 @@ const uniforms = {
 	sensor_angle: uniform(Math.PI / 6., sizes.f32),
 	sensor_distance: uniform(12, sizes.f32),
 	rotation_angle: uniform(Math.PI / 32., sizes.f32),
-	velocity: uniform(.7, sizes.f32)
+	velocity: uniform(.7, sizes.f32),
+	rotation_angle_bias: uniform(0, sizes.f32)
 };
 
 const presets = {
@@ -150,6 +151,69 @@ async function main() {
 
 	writeUniforms();
 
+	const img = document.createElement("img");
+
+	img.src = new URL(
+		"/imgs/mask_1.png",
+		import.meta.url
+	).toString();
+
+	await img.decode();
+
+	const imageBitmap = await createImageBitmap(img);
+
+	console.debug({
+		width: imageBitmap.width,
+		height: imageBitmap.height
+	})
+
+	const maskTexture = gpu.createTexture({
+		label: 'maskTexture',
+		size: [imageBitmap.width, imageBitmap.height, 1],
+		format: "rgba8unorm",
+		usage:
+			GPUTextureUsage.TEXTURE_BINDING |
+			GPUTextureUsage.COPY_DST |
+			GPUTextureUsage.RENDER_ATTACHMENT,
+	});
+
+	const textureViewDescriptor = {
+		format: "rgba8unorm",
+		dimension: "2d",
+		aspect: "all"
+	};
+
+	// const samplerDescriptor = {
+	// 	addressModeU: "repeat",
+	// 	addressModeV: "repeat",
+	// 	magFilter: "linear",
+	// 	minFilter: "nearest",
+	// 	mipmapFilter: "nearest",
+	// 	maxAnisotropy: 1
+	// };
+
+	// const sampler = gpu.createSampler(samplerDescriptor);
+
+	gpu.queue.copyExternalImageToTexture(
+		{ source: imageBitmap },
+		{ texture: maskTexture },
+		[imageBitmap.width, imageBitmap.height]
+	);
+
+	const textureBindGroupLayout = gpu.createBindGroupLayout({
+		entries: [{ visibility, binding: 0, texture: {} }]
+	})
+
+	const textureBindGroup = gpu.createBindGroup({
+		layout: textureBindGroupLayout,
+		entries: [
+			{
+				binding: 0,
+				resource: maskTexture.createView(textureViewDescriptor),
+			},
+		]
+	})
+
 	const positionsBuffer = gpu.createBuffer({
 		size: sizes.vec2.numBytes * uniforms.count.value,
 		usage: GPUBufferUsage.STORAGE,
@@ -165,11 +229,17 @@ async function main() {
 		usage: GPUBufferUsage.STORAGE,
 	});
 
+	const alignmentCapacityBuffer = gpu.createBuffer({
+		size: sizes.f32.numBytes * uniforms.count.value,
+		usage: GPUBufferUsage.STORAGE,
+	});
+
 	const agentsLayout = gpu.createBindGroupLayout({
 		entries: [
 			{ visibility, binding: 0, buffer: { type: "storage" } },
 			{ visibility, binding: 1, buffer: { type: "storage" } },
 			{ visibility, binding: 2, buffer: { type: "storage" } },
+			{ visibility, binding: 3, buffer: { type: "storage" } },
 		],
 	});
 
@@ -179,11 +249,12 @@ async function main() {
 			{ binding: 0, resource: { buffer: positionsBuffer } },
 			{ binding: 1, resource: { buffer: headingsBuffer } },
 			{ binding: 2, resource: { buffer: attGridBuffer } },
+			{ binding: 3, resource: { buffer: alignmentCapacityBuffer } },
 		],
 	});
 
 	const layout = gpu.createPipelineLayout({
-		bindGroupLayouts: [pixelBufferLayout, uniformsLayout, agentsLayout],
+		bindGroupLayouts: [pixelBufferLayout, uniformsLayout, agentsLayout, textureBindGroupLayout],
 	});
 
 	const module = await createShader(gpu, "compute.wgsl");
@@ -215,6 +286,7 @@ async function main() {
 		pass.setBindGroup(0, pixelBufferBindGroup);
 		pass.setBindGroup(1, uniformBuffersBindGroup);
 		pass.setBindGroup(2, agentsBuffersBindGroup);
+		pass.setBindGroup(3, textureBindGroup);
 		pass.dispatchWorkgroups(settings.agentWorkgroups);
 		pass.end();
 		gpu.queue.submit([encoder.finish()]);
@@ -236,6 +308,7 @@ async function main() {
 		pass.setBindGroup(0, pixelBufferBindGroup);
 		pass.setBindGroup(1, uniformBuffersBindGroup);
 		pass.setBindGroup(2, agentsBuffersBindGroup);
+		pass.setBindGroup(3, textureBindGroup);
 
 		pass.setPipeline(diffusePipeline);
 		pass.dispatchWorkgroups(settings.gridWorkgroups, settings.gridWorkgroups);
@@ -289,9 +362,13 @@ async function main() {
 		.name('agent count')
 		.step(1)
 		.listen();
-	gui.add(uniforms.velocity, 'value', 0, 15)
+	gui.add(uniforms.velocity, 'value', -10, 15)
 		.name('velocity')
 		.listen();
+	// gui.add(uniforms.rotation_angle_bias, 'value', -Math.PI, Math.PI)
+	// 	.name('rotation angle bias')
+	// 	.step(.001)
+	// 	.listen();
 	gui.add(selectedPreset, 'current', Object.keys(presets))
 		.name('preset')
 		.onChange(preset => {

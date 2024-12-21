@@ -29,6 +29,9 @@ const kernel_size = 1.;
 @group(1) @binding(6)  
   var<uniform> velocity : f32;
 
+@group(1) @binding(7)  
+  var<uniform> rotation_angle_bias : f32;
+
 // Other buffers
 @group(2) @binding(0)  
   var<storage, read_write> positions : array<vec2f>;
@@ -38,6 +41,15 @@ const kernel_size = 1.;
 
 @group(2) @binding(2)  
   var<storage, read_write> attGrid : array<f32>;
+
+@group(2) @binding(3)  
+  var<storage, read_write> alignmentCapacity : array<f32>;
+
+// texture
+@group(3) @binding(0)  
+  var maskTexture : texture_2d<f32>;
+// @group(3) @binding(1)  
+//   var maskSampler : sampler;
 
 fn r(n: f32) -> f32 {
   let x = sin(n) * 43758.5453;
@@ -53,6 +65,7 @@ fn reset(@builtin(global_invocation_id) id : vec3u) {
   let seed = f32(id.x)/f32(count);
   var p = vec2(r(seed), r(seed + 0.1));
   p *= rez;
+
   positions[id.x] = p;
   headings[id.x] = normalize(vec2(r(f32(id.x+1)), r(f32(id.x + 2))) - 0.5);
 }
@@ -66,31 +79,54 @@ fn simulate(@builtin(global_invocation_id) id : vec3u) {
 
   // sensor positions
   var p_f = wrap(p + sensor_distance * norm_h);
-  var p_fl = wrap(p + sensor_distance * rotate2d(sensor_angle) * norm_h);
-  var p_fr = wrap(p + sensor_distance * rotate2d(-sensor_angle) * norm_h);
+  var p_fl = wrap(p + sensor_distance * rotate2d(sensor_angle + rotation_angle_bias) * norm_h);
+  var p_fr = wrap(p + sensor_distance * rotate2d(-(sensor_angle + rotation_angle_bias)) * norm_h);
 
   // sensor values
-  var f = attGrid[index(p_f)];
+  var f = attGrid[index(p_f)];//; - alignmentCapacity[id.x];
   var fl = attGrid[index(p_fl)];
   var fr = attGrid[index(p_fr)];
 
   var rotation_sign = 0;
-  if (f > fl && f > fr) 
-  {
-    // do nothing
-  } 
-  else if (f < fl && f < fr) 
-  {
-    rotation_sign = select(-1, 1, r(f32(id.x) / f32(count) + time) > 0.5);
-  } 
-  else if (fl < fr) 
-  {
-    rotation_sign = -1;
-  } 
-  else if (fl > fr) 
-  {
-    rotation_sign = 1;
-  }
+  // var sensitivity = alignmentCapacity[id.x];
+
+  // if (alignmentCapacity[id.x] > cohesion) 
+  // {
+  //   var random_rotation = r(f32(id.x) + time/100.);
+  //   norm_h = rotate2d((random_rotation - .5) * 2) * norm_h;
+  //   alignmentChange = -cohesion;
+  //   velocityFactor = -1;
+  // }
+  // else 
+  // {
+
+    // sensitivity threshold,
+    // sensitivity reset coefficient
+    // sensitivity att grid acquisition rate (coeff) 
+    // if ((f > fl && f > fr) || sensitivity > alignmentCapacity[id.x]) 
+    // {
+    //   sensitivity *= 0.5;
+      // alignmentChange = ;
+    // } else {
+      // sensitivity = min(1, sensitivity + attGrid[index(p)] / 1.);
+      if (f < fl && f < fr) 
+      {
+        rotation_sign = select(-1, 1, r(f32(id.x) / f32(count) + time) > 0.5);
+      } 
+      else if (fl < fr) 
+      {
+        rotation_sign = -1;
+      } 
+      else if (fl > fr) 
+      {
+        rotation_sign = 1;
+      }
+    // }
+
+    // alignmentCapacity[id.x] = sensitivity;
+  // }
+
+  // alignmentCapacity[id.x] += alignmentChange;
 
   h = rotate2d(f32(rotation_sign) * rotation_angle) * norm_h;
   headings[id.x] = h;
@@ -100,6 +136,7 @@ fn simulate(@builtin(global_invocation_id) id : vec3u) {
   positions[id.x] = wrap(p);
 
   // AGENT RENDERING
+  // var alignment = alignmentCapacity[id.x]; // saturation
   var hue = (f32(rotation_sign + 1) + .3) % 1;
   pixels[index(p)] += vec4(hsl_to_rgb(vec3(hue, 1., .55)), 1.);
 
@@ -123,6 +160,8 @@ fn render(@builtin(global_invocation_id) id : vec3u)
 fn diffuse(@builtin(global_invocation_id) id : vec3u) 
 {
   var p = vec2(f32(id.x), f32(id.y));
+
+  var maskValue = 1.;//textureLoad(maskTexture, vec2i(p / 1.85), 0).r;
   
   var sum = 0.;
   for(var x = -kernel_size; x <= kernel_size; x += 1.0) 
@@ -139,7 +178,7 @@ fn diffuse(@builtin(global_invocation_id) id : vec3u)
   var close_to_edgeness_x = -pow((norm_p.x - .5) * 2, 6) + 1;
   var close_to_edgeness_y = -pow((norm_p.y - .5) * 2, 6) + 1;
 
-  attGrid[index(p)] *= min(close_to_edgeness_x, close_to_edgeness_y);
+  attGrid[index(p)] *= min(close_to_edgeness_x, close_to_edgeness_y) * maskValue;
 }
 
 fn rotate2d(angle : f32) -> mat2x2<f32> 
